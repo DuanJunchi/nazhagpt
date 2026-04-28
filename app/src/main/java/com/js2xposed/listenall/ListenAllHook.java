@@ -2,6 +2,8 @@ package com.js2xposed.listenall;
 
 import android.app.Application;
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -21,6 +23,7 @@ public final class ListenAllHook implements IXposedHookLoadPackage {
     private static final String PROJECT_CLASS = "com.autoapp.autoapp.StaticClass.project";
     private static final String HTTP_CLASS = "com.autoapp.autoapp.Classes.Http";
     private static final String AUTO_CLIENT_CLASS = "com.autoapp.autoapp.client.autoClient";
+    private static final long[] RETRY_DELAYS_MS = new long[]{0L, 500L, 1500L, 3000L, 6000L, 10000L};
 
     private static final String MOCK_JS_CODE = "jFsIQLOVDPQzZMPv7MO/9CxGzX2cIk2Dl5viTpqBOGs7D7k+EMPhisqJkw2ogQs4t+jXdScB8qhmtIW5WJqK3SocJoktiwdAgcVzGhEwq0LZE5JtbxGE6FWRoFcEDBBmz/5BQ3GV+9FINP8IEXmw4uRB8G+yasP68rcqVlgLPDNgxyPLbkSrNc1od7pkAzDIScc8sfcuM2kv1rjbb/G7lUzN9dHmFeoaj6IM3PbMJb2l48GxLFu+oUvN5h2nhm8V38/ARh7pHsvJjBXiQTksiWWlV1C4FUZIZzTFdG955rev+oDPS7BR41AKGEE3DwccvzqLy09FuRJrK4rf6P8h/GzKWBiK/dUTL9OontNdCcy3+lQdGDnIYY4zM/uDhVxcin/hHLohFz3m3zu7elCUXGWcIsebcL1VrA/ubQHIVyBPXVgrhTaTdppt3RNpzYybf3PBS4xfmOJ7Gkbg/RfRlbidCCLaqpQwNEXPUa8/gxtsaJgqCS2tCEs//Y1W4zOqigF3a5nKzEL2pxChz7rN/BP8NdNf5OGtNr3IBj7Arx4YIZrDjlYwna53ai7CANlb21mDWmSlnNYtpXBuv49UAC3I5YH8oTH7gyGdYtfMFo4DPye/dPdnbtiVDc8w9iyQFuOXidT6vDvaTAfZmnc5M+xuWBJ/ClMLzy4n1azqu84Q6QNdQIUEQHvFUIZc64Z2OW08SmYiyC1eTk6csGNSa2/6A3RqmmEKYzXBu6NUtuJ82Yoyy86G3GRqvkeb/V191WMTJB0re7q7E9IKYr85mQm1g0mUwTSYWQtBAl+/57ghcmx7jhQsu16eI5lC/Lu5xcwgqTXCrQeRNVOoTi+vWUKg+5YmQ/fXLjFZRf31Hk9mQigEKaH6Bov/hHd3PyP4J1LRq/QJNIJNeZzNAGWEjXl8ZHmPuBsxamqE0tk4D+Px3S0B0NOVTBG3b2+uQeOXdxba+ye+me6Iq5pyhiGnQtl8DEDt6FwQDBv5nqnfZJGa4CYhQMX3frUrioRyhwSoWOveH3eN8WccrK1z00a5XvUJTFwRHowo9GumIlRzzKrIfQYT0p5gEmvEblbsGx75wbh6M8L4fxUJn4TQVMzm5m/fRJcfXM7Uw62i1m0QVBL7xRXXq6wYsv19xk8cW7FTVrLdoTo4tgWqJLwM5rKh/SEyWWVo7ruAn7qcIJTmmEMVTrYiSpGRSv7w4pqpZJPfeWyf9l8WN25JZ7KAVHwDDJfH1nZ4EGQyuMOx/UDs8AQ/QoR87bAefTTL51SuOkZ5L+47i4E5nReBd4kW1gyM8//SApgIdh0OWEtGyXibk2Gi/21VcwxclKt0imTkGy4ALSIm2Bo5tGAr3BcBmlY/Mh6UiMcBSt8tveq2TGHydUWPZsVKvK0m8mp5s2OcoBoQ+BZ/MtapwkJTMsVOPTWUfn+womY1MhH2c6TcNk0CKgpJU57cx9AvBdSCry0KN3v8umbsASSdU+2KhTiAbQuDfFq+UtJytkvNB52VlDm8b/HYd5TWSncqeM72hm8drK06HJwkLAdiCx/prMn1nfyad5vZJqwtQNbr0LNq2LO5sOLmxFPTHoMI5ykEV6LjlCLtBKnAsifK/gCkIX/3ul5eT/OgBx+fAzA9HhsDlwh/LmmtO/PJEBLi2BPk/ATWMbGHSumKPp7fsn1fILA1cKdR4bPEhyANsTCAEzCXW2vhov5doesI5yi42vfigiJPPydPUT632w1nzvlBgdDFFK/CXnIXRv2ifvkTKG0PUIJZcf4X0g6pBuBAFanjhaZIOaXrnn4LDiNLfCOunnZK5qA8x1Rt0LqOqAMvtzibI+of7CdtOcGPxaJG9x5U19gtZrsp4vfoXqHcjHUs59LQe0b/tg==";
     private static final Set<Class<?>> PROJECT_INIT_CLASSES = Collections.newSetFromMap(new WeakHashMap<Class<?>, Boolean>());
@@ -40,10 +43,57 @@ public final class ListenAllHook implements IXposedHookLoadPackage {
         }
 
         log("[+] Loaded target: " + lpparam.packageName);
+        boolean lspatchMode = isLspatchMode(lpparam);
+        if (lspatchMode) {
+            log("[*] LSPatch mode detected; using delayed safe install");
+            scheduleInstallRetries(lpparam.classLoader);
+            log("[*] Waiting for app startup before installing hooks...");
+            return;
+        }
+
         hookClassLoader();
         hookApplicationAttach();
         tryInstallFromClassLoader(lpparam.classLoader, "LoadPackage");
+        scheduleInstallRetries(lpparam.classLoader);
         log("[*] Waiting for autoapp classes from app/dynamic classloaders...");
+    }
+
+    private static boolean isLspatchMode(XC_LoadPackage.LoadPackageParam lpparam) {
+        String sourceDir = lpparam.appInfo != null ? String.valueOf(lpparam.appInfo.sourceDir) : "";
+        String publicSourceDir = lpparam.appInfo != null ? String.valueOf(lpparam.appInfo.publicSourceDir) : "";
+        String classLoader = String.valueOf(lpparam.classLoader);
+        return sourceDir.contains("/lspatch/")
+                || publicSourceDir.contains("/lspatch/")
+                || classLoader.contains("/lspatch/");
+    }
+
+    private static void scheduleInstallRetries(final ClassLoader classLoader) {
+        try {
+            Handler handler = new Handler(Looper.getMainLooper());
+            for (final long delayMs : RETRY_DELAYS_MS) {
+                handler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        rememberCurrentApplication();
+                        tryInstallFromClassLoader(classLoader, "delayed retry " + delayMs + "ms");
+                        retryProjectArgs("delayed retry " + delayMs + "ms");
+                    }
+                }, delayMs);
+            }
+        } catch (Throwable t) {
+            logThrowable("schedule delayed retries failed", t);
+        }
+    }
+
+    private static void rememberCurrentApplication() {
+        try {
+            Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
+            Object application = XposedHelpers.callStaticMethod(activityThreadClass, "currentApplication");
+            if (application instanceof Context) {
+                rememberContext((Context) application);
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     private static synchronized void hookApplicationAttach() {
