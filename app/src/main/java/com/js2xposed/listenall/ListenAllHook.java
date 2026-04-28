@@ -1,7 +1,12 @@
 package com.js2xposed.listenall;
 
+import android.app.Application;
+import android.content.Context;
+
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
+import java.util.Collections;
+import java.util.Set;
+import java.util.WeakHashMap;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
@@ -17,6 +22,12 @@ public final class ListenAllHook implements IXposedHookLoadPackage {
     private static final String AUTO_CLIENT_CLASS = "com.autoapp.autoapp.client.autoClient";
 
     private static final String MOCK_JS_CODE = "jFsIQLOVDPQzZMPv7MO/9CxGzX2cIk2Dl5viTpqBOGs7D7k+EMPhisqJkw2ogQs4t+jXdScB8qhmtIW5WJqK3SocJoktiwdAgcVzGhEwq0LZE5JtbxGE6FWRoFcEDBBmz/5BQ3GV+9FINP8IEXmw4uRB8G+yasP68rcqVlgLPDNgxyPLbkSrNc1od7pkAzDIScc8sfcuM2kv1rjbb/G7lUzN9dHmFeoaj6IM3PbMJb2l48GxLFu+oUvN5h2nhm8V38/ARh7pHsvJjBXiQTksiWWlV1C4FUZIZzTFdG955rev+oDPS7BR41AKGEE3DwccvzqLy09FuRJrK4rf6P8h/GzKWBiK/dUTL9OontNdCcy3+lQdGDnIYY4zM/uDhVxcin/hHLohFz3m3zu7elCUXGWcIsebcL1VrA/ubQHIVyBPXVgrhTaTdppt3RNpzYybf3PBS4xfmOJ7Gkbg/RfRlbidCCLaqpQwNEXPUa8/gxtsaJgqCS2tCEs//Y1W4zOqigF3a5nKzEL2pxChz7rN/BP8NdNf5OGtNr3IBj7Arx4YIZrDjlYwna53ai7CANlb21mDWmSlnNYtpXBuv49UAC3I5YH8oTH7gyGdYtfMFo4DPye/dPdnbtiVDc8w9iyQFuOXidT6vDvaTAfZmnc5M+xuWBJ/ClMLzy4n1azqu84Q6QNdQIUEQHvFUIZc64Z2OW08SmYiyC1eTk6csGNSa2/6A3RqmmEKYzXBu6NUtuJ82Yoyy86G3GRqvkeb/V191WMTJB0re7q7E9IKYr85mQm1g0mUwTSYWQtBAl+/57ghcmx7jhQsu16eI5lC/Lu5xcwgqTXCrQeRNVOoTi+vWUKg+5YmQ/fXLjFZRf31Hk9mQigEKaH6Bov/hHd3PyP4J1LRq/QJNIJNeZzNAGWEjXl8ZHmPuBsxamqE0tk4D+Px3S0B0NOVTBG3b2+uQeOXdxba+ye+me6Iq5pyhiGnQtl8DEDt6FwQDBv5nqnfZJGa4CYhQMX3frUrioRyhwSoWOveH3eN8WccrK1z00a5XvUJTFwRHowo9GumIlRzzKrIfQYT0p5gEmvEblbsGx75wbh6M8L4fxUJn4TQVMzm5m/fRJcfXM7Uw62i1m0QVBL7xRXXq6wYsv19xk8cW7FTVrLdoTo4tgWqJLwM5rKh/SEyWWVo7ruAn7qcIJTmmEMVTrYiSpGRSv7w4pqpZJPfeWyf9l8WN25JZ7KAVHwDDJfH1nZ4EGQyuMOx/UDs8AQ/QoR87bAefTTL51SuOkZ5L+47i4E5nReBd4kW1gyM8//SApgIdh0OWEtGyXibk2Gi/21VcwxclKt0imTkGy4ALSIm2Bo5tGAr3BcBmlY/Mh6UiMcBSt8tveq2TGHydUWPZsVKvK0m8mp5s2OcoBoQ+BZ/MtapwkJTMsVOPTWUfn+womY1MhH2c6TcNk0CKgpJU57cx9AvBdSCry0KN3v8umbsASSdU+2KhTiAbQuDfFq+UtJytkvNB52VlDm8b/HYd5TWSncqeM72hm8drK06HJwkLAdiCx/prMn1nfyad5vZJqwtQNbr0LNq2LO5sOLmxFPTHoMI5ykEV6LjlCLtBKnAsifK/gCkIX/3ul5eT/OgBx+fAzA9HhsDlwh/LmmtO/PJEBLi2BPk/ATWMbGHSumKPp7fsn1fILA1cKdR4bPEhyANsTCAEzCXW2vhov5doesI5yi42vfigiJPPydPUT632w1nzvlBgdDFFK/CXnIXRv2ifvkTKG0PUIJZcf4X0g6pBuBAFanjhaZIOaXrnn4LDiNLfCOunnZK5qA8x1Rt0LqOqAMvtzibI+of7CdtOcGPxaJG9x5U19gtZrsp4vfoXqHcjHUs59LQe0b/tg==";
+    private static final Set<Class<?>> PROJECT_INIT_CLASSES = Collections.newSetFromMap(new WeakHashMap<Class<?>, Boolean>());
+    private static final Set<Class<?>> HOOKED_HTTP_CLASSES = Collections.newSetFromMap(new WeakHashMap<Class<?>, Boolean>());
+    private static final Set<Class<?>> HOOKED_USER_ACTIVATE_CLASSES = Collections.newSetFromMap(new WeakHashMap<Class<?>, Boolean>());
+    private static final Set<Class<?>> HOOKED_GET_APK_KEY_CLASSES = Collections.newSetFromMap(new WeakHashMap<Class<?>, Boolean>());
+    private static boolean applicationAttachHooked;
+    private static boolean classLoaderHooked;
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
@@ -25,33 +36,136 @@ public final class ListenAllHook implements IXposedHookLoadPackage {
         }
 
         log("[+] Loaded target: " + lpparam.packageName);
-        initProjectArgs(lpparam.classLoader);
-        hookHttp(lpparam.classLoader);
-        hookAutoClient(lpparam.classLoader);
-        log("[*] Mock ready. Now click login/activate with any card code.");
+        hookClassLoader();
+        hookApplicationAttach();
+        tryInstallFromClassLoader(lpparam.classLoader, "LoadPackage");
+        log("[*] Waiting for autoapp classes from app/dynamic classloaders...");
     }
 
-    private static void initProjectArgs(ClassLoader classLoader) {
-        if (!INIT_PROJECT_ARGS) {
+    private static synchronized void hookApplicationAttach() {
+        if (applicationAttachHooked) {
             return;
         }
 
         try {
-            Class<?> projectClass = XposedHelpers.findClass(PROJECT_CLASS, classLoader);
+            XposedHelpers.findAndHookMethod(Application.class, "attach", Context.class, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    Context context = (Context) param.args[0];
+                    if (context == null) {
+                        return;
+                    }
+
+                    ClassLoader classLoader = context.getClassLoader();
+                    log("[+] Application.attach classLoader = " + classLoader);
+                    tryInstallFromClassLoader(classLoader, "Application.attach");
+                }
+            });
+
+            applicationAttachHooked = true;
+            log("[+] hooked Application.attach");
+        } catch (Throwable t) {
+            log("[-] hook Application.attach failed: " + t);
+        }
+    }
+
+    private static synchronized void hookClassLoader() {
+        if (classLoaderHooked) {
+            return;
+        }
+
+        try {
+            XposedBridge.hookAllMethods(ClassLoader.class, "loadClass", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    if (param.getThrowable() != null || param.args == null || param.args.length == 0) {
+                        return;
+                    }
+
+                    String className = String.valueOf(param.args[0]);
+                    if (!isWatchedClass(className)) {
+                        return;
+                    }
+
+                    Object result = param.getResult();
+                    if (result instanceof Class<?>) {
+                        Class<?> loadedClass = (Class<?>) result;
+                        log("[+] class loaded: " + loadedClass.getName() + " by " + loadedClass.getClassLoader());
+                        onWatchedClassLoaded(loadedClass);
+                    }
+                }
+            });
+
+            classLoaderHooked = true;
+            log("[+] watching ClassLoader.loadClass");
+        } catch (Throwable t) {
+            log("[-] hook ClassLoader.loadClass failed: " + t);
+        }
+    }
+
+    private static void tryInstallFromClassLoader(ClassLoader classLoader, String source) {
+        if (classLoader == null) {
+            return;
+        }
+
+        log("[*] trying " + source + " classLoader: " + classLoader);
+        tryInstallClass(PROJECT_CLASS, classLoader);
+        tryInstallClass(HTTP_CLASS, classLoader);
+        tryInstallClass(AUTO_CLIENT_CLASS, classLoader);
+    }
+
+    private static void tryInstallClass(String className, ClassLoader classLoader) {
+        try {
+            Class<?> clazz = Class.forName(className, false, classLoader);
+            log("[+] found " + className + " by direct lookup");
+            onWatchedClassLoaded(clazz);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static boolean isWatchedClass(String className) {
+        return PROJECT_CLASS.equals(className) || HTTP_CLASS.equals(className) || AUTO_CLIENT_CLASS.equals(className);
+    }
+
+    private static void onWatchedClassLoaded(Class<?> clazz) {
+        String className = clazz.getName();
+        if (PROJECT_CLASS.equals(className)) {
+            initProjectArgs(clazz);
+        } else if (HTTP_CLASS.equals(className)) {
+            hookHttp(clazz);
+        } else if (AUTO_CLIENT_CLASS.equals(className)) {
+            hookAutoClient(clazz);
+        }
+    }
+
+    private static synchronized void initProjectArgs(Class<?> projectClass) {
+        if (!INIT_PROJECT_ARGS) {
+            return;
+        }
+        if (PROJECT_INIT_CLASSES.contains(projectClass)) {
+            return;
+        }
+
+        try {
             Object assetArgs = XposedHelpers.callStaticMethod(projectClass, "getAssetProjectArgs");
 
             if (assetArgs != null) {
                 XposedHelpers.setStaticObjectField(projectClass, "projectArgs", assetArgs);
                 log("[+] Project.projectArgs = getAssetProjectArgs()");
             }
+
+            PROJECT_INIT_CLASSES.add(projectClass);
         } catch (Throwable t) {
             log("[-] init projectArgs failed: " + t);
         }
     }
 
-    private static void hookHttp(ClassLoader classLoader) {
+    private static synchronized void hookHttp(Class<?> httpClass) {
+        if (HOOKED_HTTP_CLASSES.contains(httpClass)) {
+            return;
+        }
+
         try {
-            Class<?> httpClass = XposedHelpers.findClass(HTTP_CLASS, classLoader);
             XposedBridge.hookAllMethods(httpClass, "getHttp", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
@@ -96,17 +210,26 @@ public final class ListenAllHook implements IXposedHookLoadPackage {
                 }
             });
 
+            HOOKED_HTTP_CLASSES.add(httpClass);
             log("[+] hooked Http.getHttp for mocking");
         } catch (Throwable t) {
             log("[-] hook Http.getHttp failed: " + t);
         }
     }
 
-    private static void hookAutoClient(ClassLoader classLoader) {
+    private static void hookAutoClient(Class<?> autoClientClass) {
+        hookUserActivate(autoClientClass);
+        hookGetApkKey(autoClientClass);
+    }
+
+    private static synchronized void hookUserActivate(Class<?> autoClientClass) {
+        if (HOOKED_USER_ACTIVATE_CLASSES.contains(autoClientClass)) {
+            return;
+        }
+
         try {
             XposedHelpers.findAndHookMethod(
-                    AUTO_CLIENT_CLASS,
-                    classLoader,
+                    autoClientClass,
                     "userActivate",
                     String.class,
                     String.class,
@@ -118,13 +241,22 @@ public final class ListenAllHook implements IXposedHookLoadPackage {
                             dumpRetObj("ret", param.getResult());
                         }
                     });
-        } catch (Throwable ignored) {
+
+            HOOKED_USER_ACTIVATE_CLASSES.add(autoClientClass);
+            log("[+] hooked autoClient.userActivate");
+        } catch (Throwable t) {
+            log("[-] hook autoClient.userActivate failed: " + t);
+        }
+    }
+
+    private static synchronized void hookGetApkKey(Class<?> autoClientClass) {
+        if (HOOKED_GET_APK_KEY_CLASSES.contains(autoClientClass)) {
+            return;
         }
 
         try {
             XposedHelpers.findAndHookMethod(
-                    AUTO_CLIENT_CLASS,
-                    classLoader,
+                    autoClientClass,
                     "getApkKey",
                     String.class,
                     String.class,
@@ -138,7 +270,11 @@ public final class ListenAllHook implements IXposedHookLoadPackage {
                             dumpRetObj("ret", param.getResult());
                         }
                     });
-        } catch (Throwable ignored) {
+
+            HOOKED_GET_APK_KEY_CLASSES.add(autoClientClass);
+            log("[+] hooked autoClient.getApkKey");
+        } catch (Throwable t) {
+            log("[-] hook autoClient.getApkKey failed: " + t);
         }
     }
 
