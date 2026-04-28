@@ -4,6 +4,7 @@ import android.app.Application;
 import android.content.Context;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.Collections;
 import java.util.Set;
 import java.util.WeakHashMap;
@@ -26,6 +27,9 @@ public final class ListenAllHook implements IXposedHookLoadPackage {
     private static final Set<Class<?>> HOOKED_HTTP_CLASSES = Collections.newSetFromMap(new WeakHashMap<Class<?>, Boolean>());
     private static final Set<Class<?>> HOOKED_USER_ACTIVATE_CLASSES = Collections.newSetFromMap(new WeakHashMap<Class<?>, Boolean>());
     private static final Set<Class<?>> HOOKED_GET_APK_KEY_CLASSES = Collections.newSetFromMap(new WeakHashMap<Class<?>, Boolean>());
+    private static final Set<Class<?>> HOOKED_APPLICATION_CLASSES = Collections.newSetFromMap(new WeakHashMap<Class<?>, Boolean>());
+    private static Class<?> projectClassRef;
+    private static Context appContext;
     private static boolean applicationAttachHooked;
     private static boolean classLoaderHooked;
 
@@ -56,6 +60,8 @@ public final class ListenAllHook implements IXposedHookLoadPackage {
                         return;
                     }
 
+                    rememberContext(context);
+                    hookConcreteApplicationOnCreate(param.thisObject.getClass());
                     ClassLoader classLoader = context.getClassLoader();
                     log("[+] Application.attach classLoader = " + classLoader);
                     tryInstallFromClassLoader(classLoader, "Application.attach");
@@ -65,7 +71,33 @@ public final class ListenAllHook implements IXposedHookLoadPackage {
             applicationAttachHooked = true;
             log("[+] hooked Application.attach");
         } catch (Throwable t) {
-            log("[-] hook Application.attach failed: " + t);
+            logThrowable("hook Application.attach failed", t);
+        }
+    }
+
+    private static synchronized void hookConcreteApplicationOnCreate(Class<?> applicationClass) {
+        if (applicationClass == null || HOOKED_APPLICATION_CLASSES.contains(applicationClass)) {
+            return;
+        }
+
+        try {
+            XposedBridge.hookAllMethods(applicationClass, "onCreate", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    if (param.thisObject instanceof Context) {
+                        rememberContext((Context) param.thisObject);
+                    }
+
+                    log("[+] Application.onCreate finished: " + param.thisObject.getClass().getName());
+                    tryInstallFromClassLoader(param.thisObject.getClass().getClassLoader(), "Application.onCreate");
+                    retryProjectArgs("Application.onCreate");
+                }
+            });
+
+            HOOKED_APPLICATION_CLASSES.add(applicationClass);
+            log("[+] hooked " + applicationClass.getName() + ".onCreate");
+        } catch (Throwable t) {
+            logThrowable("hook " + applicationClass.getName() + ".onCreate failed", t);
         }
     }
 
@@ -99,7 +131,7 @@ public final class ListenAllHook implements IXposedHookLoadPackage {
             classLoaderHooked = true;
             log("[+] watching ClassLoader.loadClass");
         } catch (Throwable t) {
-            log("[-] hook ClassLoader.loadClass failed: " + t);
+            logThrowable("hook ClassLoader.loadClass failed", t);
         }
     }
 
@@ -130,6 +162,7 @@ public final class ListenAllHook implements IXposedHookLoadPackage {
     private static void onWatchedClassLoaded(Class<?> clazz) {
         String className = clazz.getName();
         if (PROJECT_CLASS.equals(className)) {
+            projectClassRef = clazz;
             initProjectArgs(clazz);
         } else if (HTTP_CLASS.equals(className)) {
             hookHttp(clazz);
@@ -147,6 +180,7 @@ public final class ListenAllHook implements IXposedHookLoadPackage {
         }
 
         try {
+            injectContextFields(projectClass);
             Object assetArgs = XposedHelpers.callStaticMethod(projectClass, "getAssetProjectArgs");
 
             if (assetArgs != null) {
@@ -156,7 +190,47 @@ public final class ListenAllHook implements IXposedHookLoadPackage {
 
             PROJECT_INIT_CLASSES.add(projectClass);
         } catch (Throwable t) {
-            log("[-] init projectArgs failed: " + t);
+            logThrowable("init projectArgs failed", t);
+        }
+    }
+
+    private static synchronized void retryProjectArgs(String source) {
+        if (projectClassRef == null || PROJECT_INIT_CLASSES.contains(projectClassRef)) {
+            return;
+        }
+
+        log("[*] retry projectArgs from " + source);
+        initProjectArgs(projectClassRef);
+    }
+
+    private static synchronized void rememberContext(Context context) {
+        Context applicationContext = context.getApplicationContext();
+        appContext = applicationContext != null ? applicationContext : context;
+        log("[+] appContext = " + appContext.getClass().getName());
+    }
+
+    private static void injectContextFields(Class<?> projectClass) {
+        if (appContext == null) {
+            return;
+        }
+
+        Field[] fields = projectClass.getDeclaredFields();
+        for (Field field : fields) {
+            int modifiers = field.getModifiers();
+            if (!Modifier.isStatic(modifiers) || !Context.class.isAssignableFrom(field.getType())) {
+                continue;
+            }
+
+            try {
+                field.setAccessible(true);
+                Object current = field.get(null);
+                if (current == null) {
+                    field.set(null, appContext);
+                    log("[+] injected Context into " + projectClass.getName() + "." + field.getName());
+                }
+            } catch (Throwable t) {
+                logThrowable("inject Context into " + field.getName() + " failed", t);
+            }
         }
     }
 
@@ -169,7 +243,9 @@ public final class ListenAllHook implements IXposedHookLoadPackage {
             XposedBridge.hookAllMethods(httpClass, "getHttp", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
+                    retryProjectArgs("Http.getHttp");
                     String url = param.args != null && param.args.length > 0 ? String.valueOf(param.args[0]) : "";
+                    log("[*] Http.getHttp called, arg0 = " + url);
 
                     if (url.contains("/apkOrder/apkActivate")) {
                         log("\n========== [MOCK] intercept apkActivate request ==========");
@@ -213,7 +289,7 @@ public final class ListenAllHook implements IXposedHookLoadPackage {
             HOOKED_HTTP_CLASSES.add(httpClass);
             log("[+] hooked Http.getHttp for mocking");
         } catch (Throwable t) {
-            log("[-] hook Http.getHttp failed: " + t);
+            logThrowable("hook Http.getHttp failed", t);
         }
     }
 
@@ -245,7 +321,7 @@ public final class ListenAllHook implements IXposedHookLoadPackage {
             HOOKED_USER_ACTIVATE_CLASSES.add(autoClientClass);
             log("[+] hooked autoClient.userActivate");
         } catch (Throwable t) {
-            log("[-] hook autoClient.userActivate failed: " + t);
+            logThrowable("hook autoClient.userActivate failed", t);
         }
     }
 
@@ -274,7 +350,7 @@ public final class ListenAllHook implements IXposedHookLoadPackage {
             HOOKED_GET_APK_KEY_CLASSES.add(autoClientClass);
             log("[+] hooked autoClient.getApkKey");
         } catch (Throwable t) {
-            log("[-] hook autoClient.getApkKey failed: " + t);
+            logThrowable("hook autoClient.getApkKey failed", t);
         }
     }
 
@@ -307,5 +383,10 @@ public final class ListenAllHook implements IXposedHookLoadPackage {
 
     private static void log(String message) {
         XposedBridge.log("[ListenAll] " + message);
+    }
+
+    private static void logThrowable(String message, Throwable throwable) {
+        XposedBridge.log("[ListenAll] [-] " + message + ": " + throwable);
+        XposedBridge.log(throwable);
     }
 }
