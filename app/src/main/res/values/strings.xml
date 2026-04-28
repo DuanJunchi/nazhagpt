@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">ListenAll LSPosed</string>
+    <string name="xposed_description">Hook fm.qingting.qtradio and mock autoapp activation APIs.</string>
+</resources>
